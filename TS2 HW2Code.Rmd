@@ -1,0 +1,122 @@
+---
+title: "TSHW2Code"
+author: "Eric Drew"
+date: "2022-10-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#LABARR LIBRARIES
+library(tseries)
+library(tidyverse)
+library(forecast)
+library(haven)
+library(fma)
+library(expsmooth)
+library(lmtest)
+library(zoo)
+library(seasonal)
+library(ggplot2)
+library(seasonalview)
+library(aTSA)
+library(imputeTS)
+library(prophet)
+```
+
+```{r code}
+########### read data ########### 
+hrl <- read.csv('C:\\Users\\ericd\\OneDrive - North Carolina State University\\Desktop\\AA502\\Time Series II\\Homework 1\\hrl_load_metered.csv')
+hrl2 <- read.csv('C:\\Users\\ericd\\OneDrive - North Carolina State University\\Desktop\\AA502\\Time Series II\\Homework 1\\hrl_load_metered - test1.csv')
+hrl3 <- read.csv('C:\\Users\\ericd\\OneDrive - North Carolina State University\\Desktop\\AA502\\Time Series II\\Homework 1\\hrl_load_metered - test2.csv')
+hrl4 <- read.csv('C:\\Users\\ericd\\OneDrive - North Carolina State University\\Desktop\\AA502\\Time Series II\\Homework 2\\hrl_load_metered - test3.csv')
+hrl5 <- read.csv('C:\\Users\\ericd\\OneDrive - North Carolina State University\\Desktop\\AA502\\Time Series II\\Homework 2\\hrl_load_metered - test4.csv')
+
+
+hrl <- rbind(hrl, hrl2, hrl3,hrl4, hrl5)
+hrl$datetime <- as.POSIXct(hrl$datetime_beginning_ept,format="%m/%d/%y %H:%M")
+
+hrl <- hrl[-c(1:5)]
+
+# impute missing values
+hrl$imp <- 0
+
+for (i in 1:nrow(hrl)){
+  if (hrl[i, "mw"] == 0){
+    hrl[i,"imp"] <- 1
+    hrl[i,"mw"] <- mean(c(hrl[i - 1, "mw"], hrl[i + 1, "mw"]))
+  }
+}
+
+# Adjust the time (1AM to 1:01AM) for Fall DST Change to establish sequence
+
+DST_index <- c(2259, 10995, 19899) # These are the Fall DST observations
+
+for (i in DST_index){
+  hrl$imp[i] <- 2
+  hrl$datetime[i] <- hrl$datetime[i] + 60
+}
+
+########### PROPHET MODEL ###########
+training <- hrl[1:(nrow(hrl)-168), ]
+valid <- hrl[(nrow(hrl)-167):nrow(hrl),]
+```
+
+
+```{r prophet}
+prophet.data <- data.frame(ds = training$datetime, y = training$mw)
+
+Prof <- prophet(daily.seasonality = TRUE)
+Prof <- fit.prophet(Prof, prophet.data)
+
+forecast.data <- make_future_dataframe(Prof, periods = 168, freq = 'hour')
+
+plot(Prof, predict(Prof, forecast.data)) 
+
+# Calculate prediction errors from forecast
+Prophet.error <- valid - tail(predict(Prof, forecast.data)$yhat, 168)
+
+Prophet.MAE <- mean(abs(Prophet.error$mw))
+Prophet.MAPE <- mean(abs(Prophet.error$mw)/abs(valid$mw))*100
+
+Prophet.MAE
+Prophet.MAPE
+
+```
+
+```{r neural}
+##Neural Networks
+train.ts <- ts(training$mw)
+train.ts %>% diff(lag = 24) %>% ggtsdisplay()
+
+NN.Model <- nnetar(diff(train.ts, 24), p = 2, P = 1)
+NN.Forecast <- forecast::forecast(NN.Model, h = 168)
+plot(NN.Forecast)
+
+Pass.Forecast <- rep(NA, 168)
+for(i in 1:168){
+  Pass.Forecast[i] <- train.ts[length(train.ts) - 168 + i] + forecast::forecast(NN.Model, h = 168)$mean[i]
+}
+
+Pass.Forecast <- ts(Pass.Forecast, frequency = 24)
+plot(train.ts, main = "Energy ARIMA Model Forecasts", xlab = "Date", ylab = "Megawatt Usage")
+lines(Pass.Forecast, col = "blue")
+
+##MAE, MAPE calculation
+NN.error <- valid$mw - Pass.Forecast
+NN.MAE <- mean(abs(NN.error))
+NN.MAPE <- mean(abs(NN.error)/abs(valid$mw))*100
+NN.MAE
+NN.MAPE
+```
+
+
+
+
+
+
+
+
+
+
+
