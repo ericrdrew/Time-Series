@@ -1,0 +1,190 @@
+---
+title: "TS-HW1"
+author: "Eric Drew"
+date: "2022-10-05"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+#LABARR LIBRARIES
+library(tseries)
+library(tidyverse)
+library(forecast)
+library(haven)
+library(fma)
+library(expsmooth)
+library(lmtest)
+library(zoo)
+library(seasonal)
+library(ggplot2)
+library(seasonalview)
+library(aTSA)
+library(imputeTS)
+library(prophet)
+```
+
+```{r data}
+data <- read.csv('C:\\Users\\ericd\\OneDrive - North Carolina State University\\Desktop\\AA502\\Time Series II\\Homework 1\\hrl_load_metered.csv')
+
+which(data$mw == 0)
+data[5283,'mw'] = (data[5282, 'mw']+data[5284,'mw'])/2
+data[14187,'mw'] = (data[14186, 'mw']+data[14187,'mw'])/2
+
+test1 <- read.csv('C:\\Users\\ericd\\OneDrive - North Carolina State University\\Desktop\\AA502\\Time Series II\\Homework 1\\hrl_load_metered - test1.csv')
+
+test2 <- read.csv('C:\\Users\\ericd\\OneDrive - North Carolina State University\\Desktop\\AA502\\Time Series II\\Homework 1\\hrl_load_metered - test2.csv')
+
+data <- rbind(data,test1)
+
+
+##create time series object
+energy <- ts(data$mw, frequency=24)
+test <- ts(test2$mw, frequency=24)
+
+
+training <- subset(energy, end = length(energy)-168)
+valid <- subset(energy, start=length(energy)-168)
+test <- ts(test2$mw, frequency=24)
+
+
+```
+
+```{r esm}
+HWES.add <- hw(training, seasonal='additive',h=168)
+summary(HWES.add)
+HWES.add$mean
+
+
+#BIC: 489730.3 
+#MAPE: 3.188799
+#MAE: 32.54299
+checkresiduals(HWES.add)
+
+#####Additive forecasting
+# Calculate prediction errors from forecast
+HWES.add.error <- valid - HWES.add$mean
+
+# Calculate prediction error statistics (MAE and MAPE)
+HWES.add.MAE <- mean(abs(HWES.add.error))
+HWES.add.MAPE <- mean(abs(HWES.add.error)/abs(valid))*100
+
+HWES.add.MAE #126.45
+HWES.add.MAPE #15.103
+
+#MULT
+HWES.mult <- hw(training, seasonal='multiplicative',h=168)
+summary(HWES.mult)
+#BIC: 487099.7 
+#MAPE: 2.927029
+#MAE: 30.49139
+checkresiduals(HWES.mult)
+
+#Multiplicative forecasting
+#autoplot(forecast::forecast(HWES.add, h = 20)) + autolayer(fitted(HWES.add), series="Fitted") + 
+  #ylab("Energy Consumption")
+
+# Calculate prediction errors from forecast
+HWES.mult.error <- valid - HWES.mult$mean
+
+# Calculate prediction error statistics (MAE and MAPE)
+HWES.mult.MAE <- mean(abs(HWES.mult.error))
+HWES.mult.MAPE <- mean(abs(HWES.mult.error)/abs(valid))*100
+
+HWES.mult.MAE #128.397
+HWES.mult.MAPE #15.426
+```
+
+```{r arima}
+training %>% diff(lag = 24) %>% ggtsdisplay()
+
+S.ARIMA <- auto.arima(training, method="ML", seasonal = TRUE)
+  summary(S.ARIMA)
+#BIC: 294224.8
+#MAPE: 3.467278
+#MAE: 36.37895
+checkresiduals(S.ARIMA)
+######################Forecast
+S.ARIMA.error <- valid - forecast::forecast(S.ARIMA, h = 168)$mean
+
+# Calculate prediction error statistics (MAE and MAPE)
+S.ARIMA.MAE <- mean(abs(S.ARIMA.error))
+S.ARIMA.MAPE <- mean(abs(S.ARIMA.error)/abs(valid))*100
+
+S.ARIMA.MAE #290.65
+S.ARIMA.MAPE #36.776
+#----------------------------------------------------------------
+S2.ARIMA <- Arima(training,order=c(1,0,0),seasonal=c(1,1,1))
+summary(S2.ARIMA)
+#BIC: 266101.4
+#MAPE: 2.082813
+#MAE: 21.28893
+checkresiduals(S2.ARIMA)
+
+#FORECASTTTTTTTTTTTTTTTT
+S2.ARIMA.error <- valid - forecast::forecast(S2.ARIMA, h = 168)$mean
+
+# Calculate prediction error statistics (MAE and MAPE)
+S2.ARIMA.MAE <- mean(abs(S2.ARIMA.error))
+S2.ARIMA.MAPE <- mean(abs(S2.ARIMA.error)/abs(valid))*100
+
+S2.ARIMA.MAE #226.28
+S2.ARIMA.MAPE #27.386
+#----------------------------------------------------------------
+
+S3.ARIMA <- Arima(training,order=c(1,0,1),seasonal=c(0,1,2))
+summary(S3.ARIMA)
+#BIC: 260349
+#MAPE: 1.85602
+#MAE: 18.90246
+checkresiduals(S3.ARIMA)
+#FORECASTTTTTTTTTTTTTTT
+S3.ARIMA.error <- valid - forecast::forecast(S3.ARIMA, h = 168)$mean
+
+# Calculate prediction error statistics (MAE and MAPE)
+S3.ARIMA.MAE <- mean(abs(S3.ARIMA.error))
+S3.ARIMA.MAPE <- mean(abs(S3.ARIMA.error)/abs(valid))*100
+
+S3.ARIMA.MAE #261.6598
+S3.ARIMA.MAPE #31.55
+
+#==----------------------------------------
+S4.ARIMA <- Arima(training,order=c(0,0,1),seasonal=c(0,1,2))
+summary(S4.ARIMA)
+#BIC: 260349
+#MAPE: 1.85602
+#MAE: 18.90246
+checkresiduals(S4.ARIMA)
+
+#FORECASTTTTTTTTTTTTTTTTTTTT
+S4.ARIMA.error <- valid - forecast::forecast(S4.ARIMA, h = 168)$mean
+
+# Calculate prediction error statistics (MAE and MAPE)
+S4.ARIMA.MAE <- mean(abs(S4.ARIMA.error))
+S4.ARIMA.MAPE <- mean(abs(S4.ARIMA.error)/abs(valid))*100
+
+S4.ARIMA.MAE #291.21
+S4.ARIMA.MAPE #35.9946
+```
+
+
+```{r x}
+#==----------------------------------------
+S5.ARIMA <- Arima(training,order=c(3,1,2),seasonal=c(0,1,2))
+summary(S5.ARIMA)
+#BIC: 
+#MAPE:
+#MAE: 
+checkresiduals(S5.ARIMA)
+
+#FORECAST
+S5.ARIMA.error <- valid - forecast::forecast(S5.ARIMA, h = 168)$mean
+
+# Calculate prediction error statistics (MAE and MAPE)
+S5.ARIMA.MAE <- mean(abs(S5.ARIMA.error))
+S5.ARIMA.MAPE <- mean(abs(S5.ARIMA.error)/abs(valid))*100
+
+S5.ARIMA.MAE #162.475
+S5.ARIMA.MAPE #19.98%
+```
+
+
